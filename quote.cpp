@@ -21,8 +21,14 @@ int main(int argc, char* argv[]) {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
                       << "  -s, --symbol SYMBOL      Specify the stock symbol (required)\n"
-                      << "  -e, --exchange EXCHANGE  Specify the exchange (default: NASDAQ)\n"
-                      << "  -h, --help               Show this help message\n";
+                      << "  -e, --exchange EXCHANGE  Specify the exchange suffix (default: none for US stocks)\n"
+                      << "                           Examples: TO (TSX), L (LSE), DE (XETRA),\n"
+                      << "                           PA (Euronext), AX (ASX), HK (Hong Kong), NS (NSE)\n"
+                      << "  -h, --help               Show this help message\n"
+                      << "\nExamples:\n"
+                      << "  " << argv[0] << " -s TSLA           # US stock (NASDAQ/NYSE)\n"
+                      << "  " << argv[0] << " -s SHOP -e TO     # Toronto Stock Exchange\n"
+                      << "  " << argv[0] << " -s VOD -e L       # London Stock Exchange\n";
             return 0;
         }
     }
@@ -32,7 +38,9 @@ int main(int argc, char* argv[]) {
         std::cout << "Usage: " << argv[0] << " [options]\n"
                   << "Options:\n"
                   << "  -s, --symbol SYMBOL      Specify the stock symbol (required)\n"
-                  << "  -e, --exchange EXCHANGE  Specify the exchange (default: NASDAQ)\n"
+                  << "  -e, --exchange EXCHANGE  Specify the exchange suffix (default: none for US stocks)\n"
+                  << "                           Examples: TO (TSX), L (LSE), DE (XETRA),\n"
+                  << "                           PA (Euronext), AX (ASX), HK (Hong Kong), NS (NSE)\n"
                   << "  -h, --help               Show this help message\n";
         return 1;
     }
