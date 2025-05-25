@@ -5,7 +5,7 @@
 
 int main(int argc, char* argv[]) {
     std::string symbol = "";
-    std::string exchange = "";
+    std::string exchange = "NASDAQ"; // Set a default exchange
     
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -20,11 +20,21 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
-                      << "  -s, --symbol SYMBOL      Specify the stock symbol\n"
-                      << "  -e, --exchange EXCHANGE  Specify the exchange\n"
+                      << "  -s, --symbol SYMBOL      Specify the stock symbol (required)\n"
+                      << "  -e, --exchange EXCHANGE  Specify the exchange (default: NASDAQ)\n"
                       << "  -h, --help               Show this help message\n";
             return 0;
         }
+    }
+    
+    // If no symbol provided, show help
+    if (symbol.empty()) {
+        std::cout << "Usage: " << argv[0] << " [options]\n"
+                  << "Options:\n"
+                  << "  -s, --symbol SYMBOL      Specify the stock symbol (required)\n"
+                  << "  -e, --exchange EXCHANGE  Specify the exchange (default: NASDAQ)\n"
+                  << "  -h, --help               Show this help message\n";
+        return 1;
     }
     
     std::cout << "Fetching quote for " << symbol << " on exchange " << exchange << std::endl;

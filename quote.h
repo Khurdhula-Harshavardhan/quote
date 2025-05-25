@@ -12,6 +12,12 @@ private:
     std::string exchange; // Exchange name (e.g., "NYSE")
     std::string fetchedData; // Store the raw fetched data
 
+    // Static callback function for curl
+    static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) {
+        userp->append((char*)contents, size * nmemb);
+        return size * nmemb;
+    }
+
     // Private method to fetch data from Google Finance
     std::string fetchDataFromGoogleFinance(const std::string& symbol, const std::string& exchange) {
         // We'll use libcurl to make HTTP requests
@@ -22,31 +28,49 @@ private:
         // Initialize curl
         curl = curl_easy_init();
         if (curl) {
-            const std::string url = "https://finance.google.com/finance?q=" + symbol + "&output=json";
+            // Try a different API endpoint - Yahoo Finance alternative
+            const std::string url = "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol;
+            
+            std::cout << "Debug: Fetching URL: " << url << std::endl;
             
             // Set URL to fetch
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             
             // Set callback function to receive data
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, 
-                [](void* contents, size_t size, size_t nmemb, std::string* userp) -> size_t {
-                    userp->append((char*)contents, size * nmemb);
-                    return size * nmemb;
-                });
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
             
             // Set data buffer to write to
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
             
             // Set user agent to avoid being blocked
-            curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0");
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36");
+            
+            // Follow redirects
+            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+            
+            // Set timeout
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
             
             // Perform the request
             res = curl_easy_perform(curl);
             
+            // Get HTTP response code
+            long response_code;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+            
+            std::cout << "Debug: HTTP Response Code: " << response_code << std::endl;
+            std::cout << "Debug: Response size: " << readBuffer.size() << " bytes" << std::endl;
+            
             // Check for errors
             if (res != CURLE_OK) {
                 handleError("curl_easy_perform() failed: " + std::string(curl_easy_strerror(res)));
+                curl_easy_cleanup(curl);
                 return "";
+            }
+            
+            if (response_code != 200) {
+                handleError("HTTP request failed with response code: " + std::to_string(response_code));
+                std::cout << "Debug: Response content: " << readBuffer.substr(0, 500) << std::endl;
             }
             
             // Clean up
@@ -110,12 +134,21 @@ public:
     // Gets quote data for the specified stock symbol
     void fetchQuote(const std::string& symbol)
     {
+        std::cout << "Debug: Starting fetchQuote for symbol: " << symbol << std::endl;
+        
         if (!isValidSymbol(symbol)) {
             handleError("Invalid stock symbol: " + symbol);
             return;
         }
+        
+        std::cout << "Debug: Symbol validation passed" << std::endl;
         this->symbol = symbol;
+        
+        std::cout << "Debug: Calling fetchDataFromGoogleFinance" << std::endl;
         std::string data = fetchDataFromGoogleFinance(symbol, exchange);
+        
+        std::cout << "Debug: Received data length: " << data.length() << std::endl;
+        
         if (!data.empty()) {
             parseData(data);
             displayStockInfo();
