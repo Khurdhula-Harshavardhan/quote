@@ -6,6 +6,7 @@
 #include<iomanip>
 #include<algorithm>
 #include<cmath>
+#include<chrono>
 
 namespace quote {
 // Stock data structure
@@ -24,6 +25,8 @@ struct StockData {
     std::vector<double> prices;
     std::vector<long> timestamps;
     bool hasData = false;
+    std::string lastFetchTime = "";
+    double fetchDurationMs = 0.0;
 };
 
 // A simple class for a command-line tool that fetches stock quotes from Google Finance
@@ -63,9 +66,6 @@ private:
             
             const std::string url = "https://query1.finance.yahoo.com/v8/finance/chart/" + fullSymbol;
             
-            std::cout << "Debug: Fetching URL: " << url << std::endl;
-            std::cout << "Debug: Full symbol with exchange: " << fullSymbol << std::endl;
-            
             // Set URL to fetch
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             
@@ -91,9 +91,6 @@ private:
             long response_code;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
             
-            std::cout << "Debug: HTTP Response Code: " << response_code << std::endl;
-            std::cout << "Debug: Response size: " << readBuffer.size() << " bytes" << std::endl;
-            
             // Check for errors
             if (res != CURLE_OK) {
                 handleError("curl_easy_perform() failed: " + std::string(curl_easy_strerror(res)));
@@ -103,7 +100,6 @@ private:
             
             if (response_code != 200) {
                 handleError("HTTP request failed with response code: " + std::to_string(response_code));
-                std::cout << "Debug: Response content: " << readBuffer.substr(0, 500) << std::endl;
             }
             
             // Clean up
@@ -124,7 +120,10 @@ private:
             data.find("\"result\":[]") != std::string::npos) {
             fetchedData = "No data found for this symbol/exchange combination.";
             return;
-        } else if (data.find("\"error\"") != std::string::npos) {
+        }
+        
+        // More specific error checking - look for actual error structure
+        if (data.find("\"chart\":{\"error\"") != std::string::npos) {
             fetchedData = "API returned an error.";
             return;
         }
@@ -136,32 +135,137 @@ private:
 
     // Parse JSON and extract stock data
     void parseStockData(const std::string& jsonData) {
+        // Save timing info before resetting stockData
+        std::string savedFetchTime = stockData.lastFetchTime;
+        double savedFetchDuration = stockData.fetchDurationMs;
+        
         stockData = StockData();
         
+        // Restore timing info
+        stockData.lastFetchTime = savedFetchTime;
+        stockData.fetchDurationMs = savedFetchDuration;
+        
         try {
-            // Extract meta information
-            extractValue(jsonData, "\"symbol\":\"", stockData.symbol);
-            extractValue(jsonData, "\"longName\":\"", stockData.name);
-            extractValue(jsonData, "\"currency\":\"", stockData.currency);
-            extractValue(jsonData, "\"exchangeName\":\"", stockData.exchange);
+            // Check if we have valid result data
+            if (jsonData.find("\"result\":null") != std::string::npos) {
+                return;
+            }
             
-            // Extract price data
-            stockData.currentPrice = extractDoubleValue(jsonData, "\"regularMarketPrice\":");
-            stockData.previousClose = extractDoubleValue(jsonData, "\"previousClose\":");
-            stockData.dayHigh = extractDoubleValue(jsonData, "\"regularMarketDayHigh\":");
-            stockData.dayLow = extractDoubleValue(jsonData, "\"regularMarketDayLow\":");
-            stockData.fiftyTwoWeekHigh = extractDoubleValue(jsonData, "\"fiftyTwoWeekHigh\":");
-            stockData.fiftyTwoWeekLow = extractDoubleValue(jsonData, "\"fiftyTwoWeekLow\":");
-            stockData.volume = extractLongValue(jsonData, "\"regularMarketVolume\":");
+            // Extract meta information from the first result
+            size_t metaPos = jsonData.find("\"meta\":");
+            if (metaPos == std::string::npos) {
+                return;
+            }
             
-            // Extract price array for graph
-            extractPriceArray(jsonData, stockData.prices);
+            // Extract from meta section
+            stockData.symbol = extractStringFromMeta(jsonData, "symbol");
+            stockData.name = extractStringFromMeta(jsonData, "longName");
+            if (stockData.name.empty()) {
+                stockData.name = extractStringFromMeta(jsonData, "shortName");
+            }
+            stockData.currency = extractStringFromMeta(jsonData, "currency");
+            stockData.exchange = extractStringFromMeta(jsonData, "exchangeName");
+            
+            // Extract price data from meta section
+            stockData.currentPrice = extractDoubleFromMeta(jsonData, "regularMarketPrice");
+            stockData.previousClose = extractDoubleFromMeta(jsonData, "previousClose");
+            stockData.dayHigh = extractDoubleFromMeta(jsonData, "regularMarketDayHigh");
+            stockData.dayLow = extractDoubleFromMeta(jsonData, "regularMarketDayLow");
+            stockData.fiftyTwoWeekHigh = extractDoubleFromMeta(jsonData, "fiftyTwoWeekHigh");
+            stockData.fiftyTwoWeekLow = extractDoubleFromMeta(jsonData, "fiftyTwoWeekLow");
+            stockData.volume = extractLongFromMeta(jsonData, "regularMarketVolume");
+            
+            // If regularMarketPrice is 0, try chartPreviousClose as current price
+            if (stockData.currentPrice == 0.0) {
+                stockData.currentPrice = extractDoubleFromMeta(jsonData, "chartPreviousClose");
+            }
+            
+            // Extract price array for graph from indicators.quote[0].close
+            extractPriceArrayFromIndicators(jsonData, stockData.prices);
             
             stockData.hasData = (stockData.currentPrice > 0);
             
+        } catch (const std::exception& e) {
+            stockData.hasData = false;
         } catch (...) {
             stockData.hasData = false;
         }
+    }
+
+    // Helper function to extract string values from meta section
+    std::string extractStringFromMeta(const std::string& json, const std::string& key) {
+        size_t metaPos = json.find("\"meta\":");
+        if (metaPos == std::string::npos) return "";
+        
+        size_t metaEnd = json.find("\"timestamp\":", metaPos);
+        if (metaEnd == std::string::npos) metaEnd = json.size();
+        
+        std::string metaSection = json.substr(metaPos, metaEnd - metaPos);
+        
+        std::string searchKey = "\"" + key + "\":\"";
+        size_t pos = metaSection.find(searchKey);
+        if (pos != std::string::npos) {
+            pos += searchKey.length();
+            size_t end = metaSection.find("\"", pos);
+            if (end != std::string::npos) {
+                return metaSection.substr(pos, end - pos);
+            }
+        }
+        return "";
+    }
+
+    // Helper function to extract double values from meta section
+    double extractDoubleFromMeta(const std::string& json, const std::string& key) {
+        size_t metaPos = json.find("\"meta\":");
+        if (metaPos == std::string::npos) return 0.0;
+        
+        size_t metaEnd = json.find("\"timestamp\":", metaPos);
+        if (metaEnd == std::string::npos) metaEnd = json.size();
+        
+        std::string metaSection = json.substr(metaPos, metaEnd - metaPos);
+        
+        std::string searchKey = "\"" + key + "\":";
+        size_t pos = metaSection.find(searchKey);
+        if (pos != std::string::npos) {
+            pos += searchKey.length();
+            size_t end = metaSection.find_first_of(",}", pos);
+            if (end != std::string::npos) {
+                std::string valueStr = metaSection.substr(pos, end - pos);
+                try {
+                    return std::stod(valueStr);
+                } catch (...) {
+                    return 0.0;
+                }
+            }
+        }
+        return 0.0;
+    }
+
+    // Helper function to extract long values from meta section
+    long extractLongFromMeta(const std::string& json, const std::string& key) {
+        size_t metaPos = json.find("\"meta\":");
+        if (metaPos == std::string::npos) return 0;
+        
+        size_t metaEnd = json.find("\"timestamp\":", metaPos);
+        if (metaEnd == std::string::npos) metaEnd = json.size();
+        
+        std::string metaSection = json.substr(metaPos, metaEnd - metaPos);
+        
+        std::string searchKey = "\"" + key + "\":";
+        size_t pos = metaSection.find(searchKey);
+        if (pos != std::string::npos) {
+            pos += searchKey.length();
+            size_t end = metaSection.find_first_of(",}", pos);
+            if (end != std::string::npos) {
+                std::string valueStr = metaSection.substr(pos, end - pos);
+                try {
+                    return std::stol(valueStr);
+                } catch (...) {
+                    return 0;
+                }
+            }
+        }
+        return 0;
     }
 
     // Helper functions for JSON parsing
@@ -202,8 +306,15 @@ private:
         return 0;
     }
 
-    void extractPriceArray(const std::string& json, std::vector<double>& prices) {
-        size_t closePos = json.find("\"close\":[");
+    void extractPriceArrayFromIndicators(const std::string& json, std::vector<double>& prices) {
+        // Look for the indicators section with quote data
+        size_t indicatorsPos = json.find("\"indicators\":");
+        if (indicatorsPos == std::string::npos) return;
+        
+        size_t quotePos = json.find("\"quote\":[", indicatorsPos);
+        if (quotePos == std::string::npos) return;
+        
+        size_t closePos = json.find("\"close\":[", quotePos);
         if (closePos != std::string::npos) {
             closePos += 9; // length of "\"close\":["
             size_t endPos = json.find("]", closePos);
@@ -214,7 +325,13 @@ private:
                 
                 while (std::getline(ss, price, ',')) {
                     try {
-                        prices.push_back(std::stod(price));
+                        // Remove any whitespace
+                        price.erase(0, price.find_first_not_of(" \t\n\r"));
+                        price.erase(price.find_last_not_of(" \t\n\r") + 1);
+                        
+                        if (!price.empty() && price != "null") {
+                            prices.push_back(std::stod(price));
+                        }
                     } catch (...) {
                         // Skip invalid values
                     }
@@ -325,13 +442,21 @@ private:
         std::cout << bold << "Prev Close:   " << reset << stockData.previousClose 
                   << " " << stockData.currency << std::endl;
         
+        // Fetch information
+        if (!stockData.lastFetchTime.empty()) {
+            std::cout << "\n" << bold << "Last Updated: " << reset << stockData.lastFetchTime;
+            if (stockData.fetchDurationMs > 0) {
+                std::cout << " (" << std::fixed << std::setprecision(1) 
+                          << stockData.fetchDurationMs << "ms)";
+            }
+            std::cout << std::endl;
+        }
+        
         // Price graph
         if (!stockData.prices.empty()) {
             std::cout << "\n" << bold << "Intraday Price Chart:" << reset << std::endl;
             std::cout << generateGraph(stockData.prices) << std::endl;
         }
-        
-        std::cout << std::string(80, '=') << std::endl;
     }
 
     // Private method to handle errors
@@ -370,20 +495,29 @@ public:
     // Gets quote data for the specified stock symbol
     void fetchQuote(const std::string& symbol)
     {
-        std::cout << "Debug: Starting fetchQuote for symbol: " << symbol << std::endl;
+        // Start timing
+        auto startTime = std::chrono::high_resolution_clock::now();
         
         if (!isValidSymbol(symbol)) {
             handleError("Invalid stock symbol: " + symbol);
             return;
         }
         
-        std::cout << "Debug: Symbol validation passed" << std::endl;
         this->symbol = symbol;
         
-        std::cout << "Debug: Calling fetchDataFromGoogleFinance" << std::endl;
         std::string data = fetchDataFromGoogleFinance(symbol, exchange);
         
-        std::cout << "Debug: Received data length: " << data.length() << std::endl;
+        // End timing
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+        stockData.fetchDurationMs = duration.count() / 1000.0; // Convert to milliseconds
+        
+        // Set timestamp
+        auto now = std::chrono::system_clock::now();
+        auto time_t = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+        stockData.lastFetchTime = ss.str();
         
         if (!data.empty()) {
             parseData(data);
