@@ -524,7 +524,84 @@ private:
         return graph;
     }
 
-    // Create dashboard display
+    // Private method to handle errors
+    void handleError(const std::string& errorMessage) {
+        std::cerr << "Error: " << errorMessage << std::endl;
+    }
+    
+    // Private method to validate the stock symbol
+    bool isValidSymbol(const std::string& symbol) const {
+        // Basic validation - not empty and contains only alphanumeric characters
+        if (symbol.empty()) return false;
+        for (char c : symbol) {
+            if (!std::isalnum(c) && c != '.') return false;
+        }
+        return true;
+    }
+    
+    // Private method to validate the exchange name
+    bool isValidExchange(const std::string& exchange) const {
+        // Basic validation - not empty
+        return !exchange.empty();
+    }
+
+public:
+    // Creates a new Quote instance
+    Quote(std::string symbol = "", std::string exchange = "NYSE") {
+        this->symbol = symbol;
+        this->exchange = exchange;
+    };
+
+    // Cleans up resources
+    ~Quote() {
+        // Destructor implementation
+    }
+
+    // Gets quote data for the specified stock symbol
+    // Fetch quote data without displaying (for watch mode)
+    bool fetchQuoteData(const std::string& symbol)
+    {
+        // Start timing
+        auto startTime = std::chrono::high_resolution_clock::now();
+        
+        if (!isValidSymbol(symbol)) {
+            handleError("Invalid stock symbol: " + symbol);
+            return false;
+        }
+        
+        this->symbol = symbol;
+        
+        std::string data = fetchDataFromGoogleFinance(symbol, exchange);
+        
+        // End timing
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+        stockData.fetchDurationMs = duration.count() / 1000.0; // Convert to milliseconds
+        
+        // Set timestamp
+        auto now = std::chrono::system_clock::now();
+        auto time_t = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+        stockData.lastFetchTime = ss.str();
+        
+        if (!data.empty()) {
+            parseData(data);
+            return true;
+        } else {
+            handleError("Failed to fetch data for symbol: " + symbol + " on exchange: " + exchange);
+            return false;
+        }
+    }
+
+    void fetchQuote(const std::string& symbol)
+    {
+        if (fetchQuoteData(symbol)) {
+            displayStockInfo();
+        }
+    }
+
+    // Public method to display stock information
     void displayStockInfo() const {
         if (!stockData.hasData) {
             std::cout << "No valid stock data available." << std::endl;
@@ -594,74 +671,6 @@ private:
         if (!stockData.prices.empty()) {
             std::cout << "\n" << bold << "Intraday Price Chart:" << reset << std::endl;
             std::cout << generateGraph(stockData.prices) << std::endl;
-        }
-    }
-
-    // Private method to handle errors
-    void handleError(const std::string& errorMessage) {
-        std::cerr << "Error: " << errorMessage << std::endl;
-    }
-    
-    // Private method to validate the stock symbol
-    bool isValidSymbol(const std::string& symbol) const {
-        // Basic validation - not empty and contains only alphanumeric characters
-        if (symbol.empty()) return false;
-        for (char c : symbol) {
-            if (!std::isalnum(c) && c != '.') return false;
-        }
-        return true;
-    }
-    
-    // Private method to validate the exchange name
-    bool isValidExchange(const std::string& exchange) const {
-        // Basic validation - not empty
-        return !exchange.empty();
-    }
-
-public:
-    // Creates a new Quote instance
-    Quote(std::string symbol = "", std::string exchange = "NYSE") {
-        this->symbol = symbol;
-        this->exchange = exchange;
-    };
-
-    // Cleans up resources
-    ~Quote() {
-        // Destructor implementation
-    }
-
-    // Gets quote data for the specified stock symbol
-    void fetchQuote(const std::string& symbol)
-    {
-        // Start timing
-        auto startTime = std::chrono::high_resolution_clock::now();
-        
-        if (!isValidSymbol(symbol)) {
-            handleError("Invalid stock symbol: " + symbol);
-            return;
-        }
-        
-        this->symbol = symbol;
-        
-        std::string data = fetchDataFromGoogleFinance(symbol, exchange);
-        
-        // End timing
-        auto endTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-        stockData.fetchDurationMs = duration.count() / 1000.0; // Convert to milliseconds
-        
-        // Set timestamp
-        auto now = std::chrono::system_clock::now();
-        auto time_t = std::chrono::system_clock::to_time_t(now);
-        std::stringstream ss;
-        ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
-        stockData.lastFetchTime = ss.str();
-        
-        if (!data.empty()) {
-            parseData(data);
-            displayStockInfo();
-        } else {
-            handleError("Failed to fetch data for symbol: " + symbol + " on exchange: " + exchange);
         }
     }
 
