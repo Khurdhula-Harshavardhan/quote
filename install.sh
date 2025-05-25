@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Compile the program
-g++ -std=c++17 -Wall -o quote quote.cpp
+g++ -std=c++17 -Wall -o quote quote.cpp -lcurl
 
 # Install to system
 if [ "$EUID" -eq 0 ]; then
