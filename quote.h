@@ -181,7 +181,7 @@ private:
             }
             
             // Extract price array for graph from indicators.quote[0].close
-            extractPriceArrayFromIndicators(jsonData, stockData.prices);
+            extractPriceArrayFromIndicators(jsonData, stockData.prices, stockData.timestamps);
             
             stockData.hasData = (stockData.currentPrice > 0);
             
@@ -306,7 +306,33 @@ private:
         return 0;
     }
 
-    void extractPriceArrayFromIndicators(const std::string& json, std::vector<double>& prices) {
+    void extractPriceArrayFromIndicators(const std::string& json, std::vector<double>& prices, std::vector<long>& timestamps) {
+        // First extract timestamps from the main data section
+        size_t timestampPos = json.find("\"timestamp\":[");
+        if (timestampPos != std::string::npos) {
+            timestampPos += 13; // length of "\"timestamp\":["
+            size_t endPos = json.find("]", timestampPos);
+            if (endPos != std::string::npos) {
+                std::string timestampStr = json.substr(timestampPos, endPos - timestampPos);
+                std::stringstream ss(timestampStr);
+                std::string timestamp;
+                
+                while (std::getline(ss, timestamp, ',')) {
+                    try {
+                        // Remove any whitespace
+                        timestamp.erase(0, timestamp.find_first_not_of(" \t\n\r"));
+                        timestamp.erase(timestamp.find_last_not_of(" \t\n\r") + 1);
+                        
+                        if (!timestamp.empty() && timestamp != "null") {
+                            timestamps.push_back(std::stol(timestamp));
+                        }
+                    } catch (...) {
+                        // Skip invalid values
+                    }
+                }
+            }
+        }
+        
         // Look for the indicators section with quote data
         size_t indicatorsPos = json.find("\"indicators\":");
         if (indicatorsPos == std::string::npos) return;
@@ -333,10 +359,18 @@ private:
                             prices.push_back(std::stod(price));
                         }
                     } catch (...) {
-                        // Skip invalid values
+                        // Skip invalid values - keep arrays aligned
+                        if (!timestamps.empty() && timestamps.size() > prices.size()) {
+                            timestamps.pop_back();
+                        }
                     }
                 }
             }
+        }
+        
+        // Ensure arrays are the same size - trim timestamps if needed
+        while (timestamps.size() > prices.size() && !timestamps.empty()) {
+            timestamps.pop_back();
         }
     }
 
@@ -380,8 +414,112 @@ private:
                      std::to_string((int)yValue) + " |" + line + "\n";
         }
         
-        // Add X-axis
+        // Add X-axis base line
         graph += "     +" + std::string(graphPrices.size(), '-') + "\n";
+        
+        // Add X-axis time labels - use actual timestamps if available
+        std::string xAxisLabels = "      ";
+        int numLabels = std::min(5, (int)graphPrices.size()); // Show up to 5 time labels
+        
+        if (numLabels > 1 && !stockData.timestamps.empty()) {
+            // Use actual timestamps from the data
+            int startIndex = std::max(0, (int)stockData.timestamps.size() - (int)graphPrices.size());
+            
+            for (int labelIdx = 0; labelIdx < numLabels; labelIdx++) {
+                int pointIndex = (labelIdx * (graphPrices.size() - 1)) / (numLabels - 1);
+                int timestampIndex = startIndex + pointIndex;
+                
+                if (timestampIndex < (int)stockData.timestamps.size()) {
+                    // Convert Unix timestamp to local time
+                    time_t timestamp = stockData.timestamps[timestampIndex];
+                    auto* tm = std::localtime(&timestamp);
+                    
+                    // Format time as HH:MM
+                    std::string timeLabel;
+                    if (tm->tm_hour < 10) timeLabel += "0";
+                    timeLabel += std::to_string(tm->tm_hour) + ":";
+                    if (tm->tm_min < 10) timeLabel += "0";
+                    timeLabel += std::to_string(tm->tm_min);
+                    
+                    // Calculate spacing for alignment
+                    int targetPos = (pointIndex * 60) / graphPrices.size(); // Approximate position in 60-char width
+                    int currentPos = xAxisLabels.length() - 6; // Subtract initial spacing
+                    int spacingNeeded = std::max(0, targetPos - currentPos);
+                    
+                    // Add appropriate spacing
+                    if (labelIdx > 0) {
+                        spacingNeeded = std::max(1, spacingNeeded); // At least 1 space between labels
+                    }
+                    
+                    xAxisLabels += std::string(spacingNeeded, ' ') + timeLabel;
+                }
+            }
+        } else if (numLabels > 1) {
+            // Fallback to current time calculation if no timestamps available
+            auto now = std::chrono::system_clock::now();
+            auto currentTime = std::chrono::system_clock::to_time_t(now);
+            
+            // Calculate time span covered by the graph (assume 1-5 minute intervals based on data size)
+            int minutesPerPoint = 1;
+            if (graphPrices.size() > 200) minutesPerPoint = 5;      // 5-min intervals for larger datasets
+            else if (graphPrices.size() > 78) minutesPerPoint = 2;  // 2-min intervals for medium datasets
+            
+            for (int labelIdx = 0; labelIdx < numLabels; labelIdx++) {
+                int pointIndex = (labelIdx * (graphPrices.size() - 1)) / (numLabels - 1);
+                int minutesBack = (graphPrices.size() - 1 - pointIndex) * minutesPerPoint;
+                
+                // Calculate the time for this point
+                auto pointTime = currentTime - minutesBack * 60;
+                auto* tm = std::localtime(&pointTime);
+                
+                // Format time as HH:MM
+                std::string timeLabel;
+                if (tm->tm_hour < 10) timeLabel += "0";
+                timeLabel += std::to_string(tm->tm_hour) + ":";
+                if (tm->tm_min < 10) timeLabel += "0";
+                timeLabel += std::to_string(tm->tm_min);
+                
+                // Calculate spacing for alignment
+                int targetPos = (pointIndex * 60) / graphPrices.size(); // Approximate position in 60-char width
+                int currentPos = xAxisLabels.length() - 6; // Subtract initial spacing
+                int spacingNeeded = std::max(0, targetPos - currentPos);
+                
+                // Add appropriate spacing
+                if (labelIdx > 0) {
+                    spacingNeeded = std::max(1, spacingNeeded); // At least 1 space between labels
+                }
+                
+                xAxisLabels += std::string(spacingNeeded, ' ') + timeLabel;
+            }
+        }
+        
+        graph += xAxisLabels + "\n";
+        
+        // Dynamic interval description based on actual data
+        std::string intervalDesc = "      (Last " + std::to_string(graphPrices.size()) + " data points";
+        
+        if (!stockData.timestamps.empty() && stockData.timestamps.size() >= 2) {
+            // Calculate actual interval from timestamps
+            int startIndex = std::max(0, (int)stockData.timestamps.size() - (int)graphPrices.size());
+            if (startIndex + 1 < (int)stockData.timestamps.size()) {
+                long interval = stockData.timestamps[startIndex + 1] - stockData.timestamps[startIndex];
+                int minutes = interval / 60;
+                if (minutes > 0) {
+                    intervalDesc += " - " + std::to_string(minutes) + "min intervals";
+                } else {
+                    intervalDesc += " - real-time data";
+                }
+            }
+        } else {
+            // Fallback to estimated intervals
+            int minutesPerPoint = 1;
+            if (graphPrices.size() > 200) minutesPerPoint = 5;
+            else if (graphPrices.size() > 78) minutesPerPoint = 2;
+            intervalDesc += " - " + std::to_string(minutesPerPoint) + "min intervals";
+        }
+        
+        intervalDesc += ")\n";
+        graph += intervalDesc;
         
         return graph;
     }
