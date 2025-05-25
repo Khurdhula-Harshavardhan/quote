@@ -75,11 +75,26 @@ private:
     }
     
     // Private method to handle errors
-    void handleError(const std::string& errorMessage);
+    void handleError(const std::string& errorMessage) {
+        std::cerr << "Error: " << errorMessage << std::endl;
+    }
+    
     // Private method to validate the stock symbol
-    bool isValidSymbol(const std::string& symbol) const;
+    bool isValidSymbol(const std::string& symbol) const {
+        // Basic validation - not empty and contains only alphanumeric characters
+        if (symbol.empty()) return false;
+        for (char c : symbol) {
+            if (!std::isalnum(c) && c != '.') return false;
+        }
+        return true;
+    }
+    
     // Private method to validate the exchange name
-    bool isValidExchange(const std::string& exchange) const;
+    bool isValidExchange(const std::string& exchange) const {
+        // Basic validation - not empty
+        return !exchange.empty();
+    }
+
 public:
     // Creates a new Quote instance
     Quote(std::string symbol = "", std::string exchange = "NYSE") {
@@ -88,7 +103,9 @@ public:
     };
 
     // Cleans up resources
-    ~Quote();
+    ~Quote() {
+        // Destructor implementation
+    }
 
     // Gets quote data for the specified stock symbol
     void fetchQuote(const std::string& symbol)
@@ -108,7 +125,13 @@ public:
     }
 
     // Shows the retrieved stock information
-    void displayQuote();
+    void displayQuote() {
+        if (!fetchedData.empty()) {
+            displayStockInfo();
+        } else {
+            std::cout << "No quote data available. Please fetch a quote first." << std::endl;
+        }
+    }
 };
 }
 
