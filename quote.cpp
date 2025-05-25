@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     std::string symbol = "";
     std::string exchange = "NASDAQ"; // Set a default exchange
     bool watchMode = false;
-    double refreshInterval = 0.24; // Default 10ms for watch command
+    double refreshInterval = 0.7; // Default 700ms for watch command
 
     // Set up signal handler
     signal(SIGINT, signalHandler);
