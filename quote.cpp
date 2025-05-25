@@ -28,5 +28,16 @@ int main(int argc, char* argv[]) {
     }
     
     std::cout << "Fetching quote for " << symbol << " on exchange " << exchange << std::endl;
+
+    quote::Quote q(symbol, exchange);
+    std::string data = q.fetchDataFromGoogleFinance(symbol, exchange);
+    if (!data.empty()) {
+        q.parseData(data);
+        q.displayStockInfo();
+    } else {
+        std::cerr << "Failed to fetch data for symbol: " << symbol << " on exchange: " << exchange << std::endl;
+    }
+    q.displayQuote();
+    std::cout << "Quote fetched successfully." << std::endl;
     return 0;
 }
