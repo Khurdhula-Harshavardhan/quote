@@ -1,0 +1,24 @@
+# Maintainer: Harshavardhan Khurdhula <your-email@example.com>
+pkgname=quote
+pkgver=0.0.3
+pkgrel=1
+pkgdesc="Fast, real-time stock quotes in your terminal"
+arch=('x86_64')
+url="https://github.com/Khurdhula-Harshavardhan/quote"
+license=('MIT')
+depends=('curl')
+makedepends=('gcc' 'make')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/Khurdhula-Harshavardhan/quote/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # Update this with actual SHA256
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    make
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+    install -Dm755 quote "$pkgdir/usr/bin/quote"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

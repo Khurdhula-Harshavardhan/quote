@@ -1,0 +1,18 @@
+Package: quote
+Version: 0.0.3
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: libcurl4
+Maintainer: Harshavardhan Khurdhula <your-email@example.com>
+Description: Fast, real-time stock quotes in your terminal
+ Quote is a lightweight C++ tool for fetching real-time stock market data
+ directly in your terminal. It supports multiple international exchanges
+ and features a watch mode for continuous monitoring.
+ .
+ Features:
+  - Lightning fast C++ performance
+  - Beautiful terminal dashboard
+  - Global market support
+  - Real-time data from Yahoo Finance
+  - Watch mode for continuous monitoring

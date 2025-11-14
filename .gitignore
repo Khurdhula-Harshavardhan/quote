@@ -31,7 +31,20 @@
 *.out
 *.app
 
+# IDE and AI tools
 .vscode/
+.idea/
+.claude/
+.cursor/
+.aider/
 
+# Build artifacts
+quote
+*.deb
+*.rpm
+*.tar.gz
+quote-*/
+
+# Development files
 .quote
 sample.json

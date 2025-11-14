@@ -2,17 +2,73 @@
 
 Fast, real-time stock quotes in your terminal. Built with C++ for speed and reliability.
 
-## Quick Start
+## Installation
 
-### Install Dependencies
+### Package Managers (Recommended)
+
+**Homebrew (macOS):**
 ```bash
-sudo apt-get update
-sudo apt-get install libcurl4-openssl-dev
+brew tap Khurdhula-Harshavardhan/quote
+brew install quote
 ```
 
-### Build & Install
+**Coming soon:**
+- Debian/Ubuntu: `sudo apt install quote`
+- Arch Linux: `yay -S quote` (AUR)
+- Snap: `sudo snap install quote`
+
+### Pre-built Binaries
+
+Download from [GitHub Releases](https://github.com/Khurdhula-Harshavardhan/quote/releases):
 ```bash
+# Linux
+curl -L https://github.com/Khurdhula-Harshavardhan/quote/releases/latest/download/quote-linux-x86_64.tar.gz | tar xz
+sudo mv quote-linux-x86_64/quote /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -L https://github.com/Khurdhula-Harshavardhan/quote/releases/latest/download/quote-macos-arm64.tar.gz | tar xz
+sudo mv quote-macos-arm64/quote /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/Khurdhula-Harshavardhan/quote/releases/latest/download/quote-macos-x86_64.tar.gz | tar xz
+sudo mv quote-macos-x86_64/quote /usr/local/bin/
+```
+
+### Build from Source
+
+**macOS:**
+```bash
+# Install dependencies
+xcode-select --install
+
+# Build and install
 bash install.sh
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+# Install dependencies
+sudo apt-get update
+sudo apt-get install build-essential libcurl4-openssl-dev
+
+# Build and install
+bash install.sh
+```
+
+**Linux (Fedora/RHEL):**
+```bash
+# Install dependencies
+sudo dnf install gcc-c++ make libcurl-devel
+
+# Build and install
+bash install.sh
+```
+
+**Manual build:**
+```bash
+make              # Build the binary
+make install      # Install to system
+make check-deps   # Check if dependencies are installed
 ```
 
 ### Usage
